@@ -9,6 +9,7 @@ import 'package:flutter_map/src/layer/shared/feature_layer_utils.dart';
 import 'package:flutter_map/src/layer/shared/layer_interactivity/internal_hit_detectable.dart';
 import 'package:flutter_map/src/layer/shared/layer_projection_simplification/state.dart';
 import 'package:flutter_map/src/layer/shared/layer_projection_simplification/widget.dart';
+import 'package:flutter_map/src/layer/polyline_layer/polyline_offset_helper.dart';
 import 'package:flutter_map/src/layer/shared/line_patterns/pixel_hiker.dart';
 import 'package:flutter_map/src/misc/extensions.dart';
 import 'package:flutter_map/src/misc/offsets.dart';

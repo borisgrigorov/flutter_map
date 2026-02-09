@@ -44,10 +44,16 @@ class _PolylinePainter<R extends Object> extends CustomPainter
     // }
 
     WorldWorkControl checkIfHit(double shift) {
-      final (offsets, _) = _helper.getOffsetsXY(
+      var (offsets, _) = _helper.getOffsetsXY(
         points: projectedPolyline.points,
         shift: shift,
       );
+      if (polyline.offset != 0) {
+        if (polyline.minOffsetZoom == null ||
+            camera.zoom >= polyline.minOffsetZoom!) {
+          offsets = PolylineOffsetHelper.offsetPoints(offsets, polyline.offset);
+        }
+      }
       if (!areOffsetsVisible(offsets)) return WorldWorkControl.invisible;
 
       final strokeWidth = polyline.useStrokeWidthInMeter
@@ -129,10 +135,17 @@ class _PolylinePainter<R extends Object> extends CustomPainter
 
       /// Draws on a "single-world"
       WorldWorkControl drawIfVisible(double shift) {
-        final (offsets, _) = _helper.getOffsetsXY(
+        var (offsets, _) = _helper.getOffsetsXY(
           points: projectedPolyline.points,
           shift: shift,
         );
+        if (polyline.offset != 0) {
+          if (polyline.minOffsetZoom == null ||
+              camera.zoom >= polyline.minOffsetZoom!) {
+            offsets =
+                PolylineOffsetHelper.offsetPoints(offsets, polyline.offset);
+          }
+        }
         if (!areOffsetsVisible(offsets)) return WorldWorkControl.invisible;
 
         final hash = polyline.renderHashCode;
