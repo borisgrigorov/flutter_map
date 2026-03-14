@@ -10,6 +10,7 @@ import 'package:flutter_map/src/layer/shared/layer_interactivity/internal_hit_de
 import 'package:flutter_map/src/layer/shared/layer_projection_simplification/state.dart';
 import 'package:flutter_map/src/layer/shared/layer_projection_simplification/widget.dart';
 import 'package:flutter_map/src/layer/polyline_layer/polyline_offset_helper.dart';
+import 'package:flutter_map/src/layer/polyline_layer/polyline_overlap.dart';
 import 'package:flutter_map/src/layer/shared/line_patterns/pixel_hiker.dart';
 import 'package:flutter_map/src/misc/extensions.dart';
 import 'package:flutter_map/src/misc/offsets.dart';
@@ -60,6 +61,24 @@ base class PolylineLayer<R extends Object>
   /// Defaults to `false`.
   final bool drawInSingleWorld;
 
+  /// The pixel offset to apply when polyline segments overlap.
+  ///
+  /// When set to a value greater than 0, overlapping segments between
+  /// different polylines will be offset in opposite directions by this amount.
+  /// Non-overlapping segments are drawn at their original positions.
+  ///
+  /// Defaults to 0.0 (disabled).
+  final double offset;
+
+  /// The distance tolerance (in projected coordinates) for detecting overlapping
+  /// segments between polylines.
+  ///
+  /// A higher value considers segments further apart as "overlapping".
+  /// Only relevant when [offset] > 0.
+  ///
+  /// Defaults to 1.0.
+  final double overlapTolerance;
+
   /// Create a new [PolylineLayer] to use as child inside [FlutterMap.children].
   const PolylineLayer({
     super.key,
@@ -68,6 +87,8 @@ base class PolylineLayer<R extends Object>
     this.hitNotifier,
     this.minimumHitbox = 10,
     this.drawInSingleWorld = false,
+    this.offset = 0.0,
+    this.overlapTolerance = 1.0,
     super.simplificationTolerance,
   }) : super();
 
@@ -122,6 +143,27 @@ class _PolylineLayerState<R extends Object> extends State<PolylineLayer<R>>
             cullingMargin: widget.cullingMargin!,
           ).toList();
 
+    // Compute overlap signs if offset is enabled
+    List<List<int>> overlapOffsetSigns;
+    if (widget.offset > 0 && culled.length > 1) {
+      final allPoints = culled.map((p) => p.points).toList();
+      final groups = culled.map((p) => p.polyline.offsetGroup).toList();
+      overlapOffsetSigns = PolylineOverlapDetector.computeOverlapSigns(
+        polylinePoints: allPoints,
+        tolerance: widget.overlapTolerance,
+        polylineGroups: groups,
+      );
+    } else {
+      // No offset or only one polyline — no overlaps possible
+      overlapOffsetSigns = List.generate(
+        culled.length,
+        (i) => List<int>.filled(
+          culled[i].points.length > 1 ? culled[i].points.length - 1 : 0,
+          0,
+        ),
+      );
+    }
+
     return MobileLayerTransformer(
       child: CustomPaint(
         painter: _PolylinePainter(
@@ -129,6 +171,8 @@ class _PolylineLayerState<R extends Object> extends State<PolylineLayer<R>>
           camera: camera,
           hitNotifier: widget.hitNotifier,
           minimumHitbox: widget.minimumHitbox,
+          offset: widget.offset,
+          overlapOffsetSigns: overlapOffsetSigns,
         ),
         size: camera.size,
       ),

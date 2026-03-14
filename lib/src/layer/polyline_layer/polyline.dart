@@ -39,12 +39,14 @@ class Polyline<R extends Object> with HitDetectableElement<R> {
   /// Set to true if the width of the stroke should have meters as unit.
   final bool useStrokeWidthInMeter;
 
-  /// The offset to apply to the polyline, in logical pixels.
-  final double offset;
-
-  /// The minimum zoom level at which the offset should be applied.
-  /// If null, the offset is applied at all zoom levels.
-  final double? minOffsetZoom;
+  /// The overlap group key for offset detection.
+  ///
+  /// Polylines with the same [offsetGroup] will be checked for overlapping
+  /// segments and offset when they do. Polylines with a `null` group do not
+  /// participate in overlap detection and are never offset.
+  ///
+  /// Defaults to `null` (no offset participation).
+  final String? offsetGroup;
 
   @override
   final R? hitValue;
@@ -68,8 +70,7 @@ class Polyline<R extends Object> with HitDetectableElement<R> {
     this.strokeCap = StrokeCap.round,
     this.strokeJoin = StrokeJoin.round,
     this.useStrokeWidthInMeter = false,
-    this.offset = 0.0,
-    this.minOffsetZoom,
+    this.offsetGroup,
     this.hitValue,
   });
 
@@ -85,8 +86,7 @@ class Polyline<R extends Object> with HitDetectableElement<R> {
           strokeCap == other.strokeCap &&
           strokeJoin == other.strokeJoin &&
           useStrokeWidthInMeter == other.useStrokeWidthInMeter &&
-          offset == other.offset &&
-          minOffsetZoom == other.minOffsetZoom &&
+          offsetGroup == other.offsetGroup &&
           hitValue == other.hitValue &&
           // Expensive computations last to take advantage of lazy logic gates
           listEquals(colorsStop, other.colorsStop) &&
@@ -108,8 +108,7 @@ class Polyline<R extends Object> with HitDetectableElement<R> {
         strokeCap,
         strokeJoin,
         useStrokeWidthInMeter,
-        offset,
-        minOffsetZoom,
+        offsetGroup,
       );
 
   int? _hashCode;

@@ -8,6 +8,15 @@ class _PolylinePainter<R extends Object> extends CustomPainter
   final List<_ProjectedPolyline<R>> polylines;
   final double minimumHitbox;
 
+  /// The offset distance in logical pixels to apply to overlapping segments.
+  final double offset;
+
+  /// Per-polyline, per-segment overlap flags + offset signs.
+  /// overlapOffsetSigns[i][j] is the offset sign for polyline i, segment j.
+  /// 0 means no overlap (draw normally), +1 or -1 means offset in that
+  /// direction.
+  final List<List<int>> overlapOffsetSigns;
+
   @override
   final MapCamera camera;
 
@@ -20,11 +29,74 @@ class _PolylinePainter<R extends Object> extends CustomPainter
     required this.minimumHitbox,
     required this.camera,
     required this.hitNotifier,
+    required this.offset,
+    required this.overlapOffsetSigns,
   }) {
     _helper = OffsetHelper(camera: camera);
   }
 
   late final OffsetHelper _helper;
+
+  /// Applies per-segment offset to screen-space points based on overlap signs.
+  /// Returns the final list of offsets to draw.
+  List<Offset> _applyOverlapOffset(
+      List<Offset> offsets, List<int> segmentSigns) {
+    if (offset == 0 || offsets.length < 2) return offsets;
+
+    // Check if any segment actually needs offsetting
+    bool hasOverlap = false;
+    for (final sign in segmentSigns) {
+      if (sign != 0) {
+        hasOverlap = true;
+        break;
+      }
+    }
+    if (!hasOverlap) return offsets;
+
+    // Split into contiguous runs of same-sign segments and offset each run
+    final result = <Offset>[];
+    int runStart = 0;
+
+    while (runStart < offsets.length - 1) {
+      // Determine the sign for this run
+      final currentSign =
+          runStart < segmentSigns.length ? segmentSigns[runStart] : 0;
+
+      // Find the end of this contiguous run
+      int runEnd = runStart + 1;
+      while (runEnd < offsets.length - 1 &&
+          runEnd < segmentSigns.length &&
+          segmentSigns[runEnd] == currentSign) {
+        runEnd++;
+      }
+
+      // Extract the run points (runStart..runEnd inclusive)
+      final runPoints = offsets.sublist(runStart, runEnd + 1);
+
+      if (currentSign != 0) {
+        // Offset this run
+        final offsetRun = PolylineOffsetHelper.offsetPoints(
+            runPoints, offset * currentSign);
+        if (result.isNotEmpty && offsetRun.isNotEmpty) {
+          // Add the first point of the offset run (it connects to previous)
+          result.addAll(offsetRun);
+        } else {
+          result.addAll(offsetRun);
+        }
+      } else {
+        // No offset needed, add points directly
+        if (result.isNotEmpty && runPoints.isNotEmpty) {
+          result.addAll(runPoints);
+        } else {
+          result.addAll(runPoints);
+        }
+      }
+
+      runStart = runEnd;
+    }
+
+    return result;
+  }
 
   @override
   bool elementHitTest(
@@ -33,6 +105,7 @@ class _PolylinePainter<R extends Object> extends CustomPainter
     required LatLng coordinate,
   }) {
     final polyline = projectedPolyline.polyline;
+    final polylineIndex = polylines.indexOf(projectedPolyline);
 
     // TODO: We should check the bounding box here, for efficiency
     // However, we need to account for:
@@ -48,12 +121,15 @@ class _PolylinePainter<R extends Object> extends CustomPainter
         points: projectedPolyline.points,
         shift: shift,
       );
-      if (polyline.offset != 0) {
-        if (polyline.minOffsetZoom == null ||
-            camera.zoom >= polyline.minOffsetZoom!) {
-          offsets = PolylineOffsetHelper.offsetPoints(offsets, polyline.offset);
-        }
+
+      // Apply overlap-based offset
+      if (offset != 0 &&
+          polylineIndex >= 0 &&
+          polylineIndex < overlapOffsetSigns.length) {
+        offsets =
+            _applyOverlapOffset(offsets, overlapOffsetSigns[polylineIndex]);
       }
+
       if (!areOffsetsVisible(offsets)) return WorldWorkControl.invisible;
 
       final strokeWidth = polyline.useStrokeWidthInMeter
@@ -127,7 +203,10 @@ class _PolylinePainter<R extends Object> extends CustomPainter
       paint = Paint();
     }
 
-    for (final projectedPolyline in polylines) {
+    for (int polylineIndex = 0;
+        polylineIndex < polylines.length;
+        polylineIndex++) {
+      final projectedPolyline = polylines[polylineIndex];
       final polyline = projectedPolyline.polyline;
       if (polyline.points.isEmpty) {
         continue;
@@ -139,13 +218,13 @@ class _PolylinePainter<R extends Object> extends CustomPainter
           points: projectedPolyline.points,
           shift: shift,
         );
-        if (polyline.offset != 0) {
-          if (polyline.minOffsetZoom == null ||
-              camera.zoom >= polyline.minOffsetZoom!) {
-            offsets =
-                PolylineOffsetHelper.offsetPoints(offsets, polyline.offset);
-          }
+
+        // Apply overlap-based offset
+        if (offset != 0 && polylineIndex < overlapOffsetSigns.length) {
+          offsets =
+              _applyOverlapOffset(offsets, overlapOffsetSigns[polylineIndex]);
         }
+
         if (!areOffsetsVisible(offsets)) return WorldWorkControl.invisible;
 
         final hash = polyline.renderHashCode;
@@ -302,5 +381,6 @@ class _PolylinePainter<R extends Object> extends CustomPainter
       polylines != oldDelegate.polylines ||
       camera != oldDelegate.camera ||
       hitNotifier != oldDelegate.hitNotifier ||
-      minimumHitbox != oldDelegate.minimumHitbox;
+      minimumHitbox != oldDelegate.minimumHitbox ||
+      offset != oldDelegate.offset;
 }
